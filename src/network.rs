@@ -162,8 +162,7 @@ pub mod network {
     fn train_batch(&mut self, batch: &[(Vec<f32>, Vec<f32>)], training_speed: f32, cost_der: fn((&f32, &f32)) -> f32) {
       for (inp, out) in batch {
         self.output_layer.feed(inp);
-        // let c_respect_as = self.output().iter().zip(out).map(|(a, y)| 2.0*(a - y)).collect::<Vec<f32>>(); // quadratic
-        let c_respect_as = self.output().iter().zip(out).map(cost_der).collect::<Vec<f32>>(); // cross-entropy
+        let c_respect_as = self.output().iter().zip(out).map(cost_der).collect::<Vec<f32>>();
         self.output_layer.propagate(&c_respect_as);
       }
       self.output_layer.apply_changes(training_speed/batch.len() as f32);
