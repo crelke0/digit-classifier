@@ -13,8 +13,8 @@ pub mod network {
     fn new(num_weights: usize, activation_fn: fn(f32) -> f32, activation_fn_der: fn(f32) -> f32) -> Node {
       let mut rng = rand::thread_rng();
       Node {
-        weights: (0..num_weights).map(|_| rng.gen::<f32>()*10.0-5.0).collect(),
-        bias: rng.gen::<f32>()*10.0-5.0,
+        weights: (0..num_weights).map(|_| rng.gen::<f32>()*2.0-1.0).collect(),
+        bias: rng.gen::<f32>()*2.0-1.0,
         d_weights: vec![0.0; num_weights],
         d_bias: 0.0,
         activation_fn: activation_fn,
