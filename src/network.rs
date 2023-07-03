@@ -1,38 +1,35 @@
 pub mod network {
   use rand::prelude::*;
-  struct Node {
+  pub struct Node {
     weights: Vec<f32>,
     bias: f32,
     d_weights: Vec<f32>,
     d_bias: f32,
-    activation_fn: fn(f32) -> f32,
-    activation_fn_der: fn(f32) -> f32,
-    activation: (f32, f32) // (actual activation, activation before activation function)
+    pub activation: f32, 
+    pub a_respect_z: f32
   }
   impl Node {
-    fn new(num_weights: usize, activation_fn: fn(f32) -> f32, activation_fn_der: fn(f32) -> f32) -> Node {
+    fn new(num_weights: usize) -> Node {
       let mut rng = rand::thread_rng();
       Node {
         weights: (0..num_weights).map(|_| rng.gen::<f32>()*2.0-1.0).collect(),
         bias: rng.gen::<f32>()*2.0-1.0,
         d_weights: vec![0.0; num_weights],
         d_bias: 0.0,
-        activation_fn: activation_fn,
-        activation_fn_der: activation_fn_der,
-        activation: (0.0, 0.0)
+        activation: 0.0,
+        a_respect_z: 0.0
       }
     }
-    fn update_activation(&mut self, previous_activations: &[(f32, f32)]) {
-      let mut activation = self.bias;
+    fn update_activation(&mut self, previous_activations: &[f32]) {
+      self.activation = self.bias;
       for i in 0..previous_activations.len() {
-        activation += previous_activations[i].0*self.weights[i]
+        self.activation += previous_activations[i]*self.weights[i]
       }
-      self.activation = ((self.activation_fn)(activation), activation)
     }
-    fn add_change(&mut self, c_respect_z: f32, previous_activations: &[(f32, f32)]) {
+    fn add_change(&mut self, c_respect_z: f32, previous_activations: &[f32]) {
       self.d_bias -= c_respect_z;
       for i in 0..self.weights.len() {
-        self.d_weights[i] -= c_respect_z*previous_activations[i].0;
+        self.d_weights[i] -= c_respect_z*previous_activations[i];
       }
     }
     fn apply_change(&mut self, coef: f32) {
@@ -47,7 +44,7 @@ pub mod network {
   
   trait Layer {
     fn propagate(&mut self, c_respect_as: &[f32]);
-    fn activations(&self) -> Vec<(f32, f32)>;
+    fn activations(&self) -> Vec<f32>;
     fn feed(&mut self, input: &[f32]);
     fn num_nodes(&self) -> usize {
       self.activations().len()
@@ -57,22 +54,24 @@ pub mod network {
   
   struct HiddenLayer { // HiddenLayer is actually for hidden layers AND the output layer, since they act the same
     nodes: Vec<Node>,
-    previous_layer: Box<dyn Layer>
+    previous_layer: Box<dyn Layer>,
+    activation_fn: fn(&mut [Node])
   }
   impl HiddenLayer {
-    fn new(previous_layer: Box<dyn Layer>, node_amount: usize, activation_fn: fn(f32) -> f32, activation_fn_der: fn(f32) -> f32) -> HiddenLayer {
+    fn new(previous_layer: Box<dyn Layer>, node_amount: usize, activation_fn: fn(&mut [Node])) -> HiddenLayer {
       let mut nodes = vec![];
       for _ in 0..node_amount {
-        nodes.push(Node::new(previous_layer.num_nodes(), activation_fn, activation_fn_der))
+        nodes.push(Node::new(previous_layer.num_nodes()));
       }
       HiddenLayer {
         nodes: nodes,
-        previous_layer: previous_layer
+        previous_layer: previous_layer,
+        activation_fn: activation_fn
       }
     }
   }
   impl Layer for HiddenLayer {
-    fn activations(&self) -> Vec<(f32, f32)> {
+    fn activations(&self) -> Vec<f32> {
       self.nodes.iter().map(|x| x.activation).collect()
     }
     fn feed(&mut self, input: &[f32]) {
@@ -80,11 +79,12 @@ pub mod network {
       for node in &mut self.nodes {
         node.update_activation(&self.previous_layer.activations())
       }
+      (self.activation_fn)(&mut self.nodes)
     }
     fn propagate(&mut self, c_respect_as: &[f32]) {
       let mut c_respect_zs = vec![];
       for i in 0..self.num_nodes() {
-        c_respect_zs.push(c_respect_as[i]*(self.nodes[i].activation_fn_der)(self.activations()[i].1));
+        c_respect_zs.push(c_respect_as[i]*self.nodes[i].a_respect_z);
         self.nodes[i].add_change(c_respect_zs[i], &self.previous_layer.activations());
       }
       let mut new_c_respect_as = vec![0.0; self.previous_layer.num_nodes()];
@@ -113,8 +113,8 @@ pub mod network {
     }
   }
   impl Layer for InputLayer {
-    fn activations(&self) -> Vec<(f32, f32)> {
-      self.activations.iter().map(|x| (*x, *x)).collect()
+    fn activations(&self) -> Vec<f32> {
+      self.activations.clone()
     }
     fn feed(&mut self, input: &[f32]) {
       self.activations = input.to_vec();
@@ -128,17 +128,17 @@ pub mod network {
   }
   
   impl Network {
-    pub fn new(dim: &[usize], activation_fn: fn(f32) -> f32, activation_fn_der: fn(f32) -> f32) -> Network {
-      let mut output_layer = HiddenLayer::new(Box::new(InputLayer::new(dim[0])), dim[1], activation_fn, activation_fn_der);
+    pub fn new(dim: &[usize], activation_fns: &[fn(&mut [Node])]) -> Network {
+      let mut output_layer = HiddenLayer::new(Box::new(InputLayer::new(dim[0])), dim[1], activation_fns[0]);
       for i in 1..dim.len() {
-        output_layer = HiddenLayer::new(Box::new(output_layer), dim[i], activation_fn, activation_fn_der)
+        output_layer = HiddenLayer::new(Box::new(output_layer), dim[i], activation_fns[i]);
       }
       Network {
         output_layer: output_layer
       }
     }
     fn output(&self) -> Vec<f32>{
-      self.output_layer.activations().iter().map(|x| x.0).collect()
+      self.output_layer.activations()
     }
     fn test(&mut self, test_set: &[(Vec<f32>, Vec<f32>)]) {
       let mut total_correct = 0;
@@ -185,27 +185,7 @@ pub mod network {
       }
     }
   }
-  
-  pub fn sigmoid(x: f32) -> f32 {
-    if x > 20.0 {
-      1.0
-    } else if x < -20.0 {
-      0.0
-    } else {
-      1.0/(1.0 + f32::exp(-x))
-    }
-  }
-  pub fn sigmoid_der(x: f32) -> f32 {
-    sigmoid(x)*(1.0 - sigmoid(x))
-  }
-  
-  pub fn leaky_relu(x: f32) -> f32 {
-    if x > 0.0 { x } else { 0.01*x }
-  }
-  pub fn leaky_relu_der(x: f32) -> f32 {
-    if x > 0.0 { 1.0 } else { 0.01 }
-  }
-  
+
   pub fn quadratic_cost_der((a, y): (&f32, &f32)) -> f32{
     2.0*(a - y)
   }
