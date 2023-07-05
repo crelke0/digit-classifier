@@ -36,7 +36,6 @@ pub mod activation_fns {
     for i in 0..nodes.len() {
       nodes[i].activation = exps[i]/total;
     }
-    let zs = nodes.iter().map(|node| node.activation).collect::<Vec<f64>>();
     for i in 0..nodes.len() {
       nodes[i].as_respect_z = (0..nodes.len())
         .map(|j| if j == i { nodes[i].activation*(1.0 - nodes[i].activation) } else { -nodes[i].activation*nodes[j].activation }).collect();
