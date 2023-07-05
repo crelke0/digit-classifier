@@ -27,16 +27,16 @@ pub mod network {
       }
     }
     fn add_change(&mut self, c_respect_z: f64, previous_activations: &[f64]) {
-      self.d_bias -= c_respect_z;
+      self.d_bias += c_respect_z;
       for i in 0..self.weights.len() {
-        self.d_weights[i] -= c_respect_z*previous_activations[i];
+        self.d_weights[i] += c_respect_z*previous_activations[i];
       }
     }
-    fn apply_change(&mut self, coef: f64) {
-      self.bias += self.d_bias*coef;
+    fn apply_change(&mut self, coef: f64, lambda_over_size: f64) {
+      self.bias -= self.d_bias*coef;
       self.d_bias = 0.0;
       for i in 0..self.weights.len() {
-        self.weights[i] += self.d_weights[i]*coef;
+        self.weights[i] -= self.d_weights[i]*coef + coef*lambda_over_size*self.weights[i];
         self.d_weights[i] = 0.0
       }
     }
@@ -49,7 +49,7 @@ pub mod network {
     fn num_nodes(&self) -> usize {
       self.activations().len()
     }
-    fn apply_changes(&mut self, coef: f64);
+    fn apply_changes(&mut self, coef: f64, lambda_over_size: f64);
   }
   
   struct HiddenLayer { // HiddenLayer is actually for hidden layers AND the output layer, since they act the same
@@ -103,11 +103,11 @@ pub mod network {
   
       self.previous_layer.propagate(&new_c_respect_as);
     }
-    fn apply_changes(&mut self, coef: f64) {
+    fn apply_changes(&mut self, coef: f64, lambda_over_size: f64) {
       for node in &mut self.nodes {
-        node.apply_change(coef)
+        node.apply_change(coef, lambda_over_size)
       }
-      self.previous_layer.apply_changes(coef);
+      self.previous_layer.apply_changes(coef, lambda_over_size);
     }
   }
   
@@ -126,7 +126,7 @@ pub mod network {
     fn feed(&mut self, input: &[f64]) {
       self.activations = input.to_vec();
     }
-    fn apply_changes(&mut self, _coef: f64) { }
+    fn apply_changes(&mut self, _coef: f64, _lambda_over_size: f64) { }
     fn propagate(&mut self, _c_respect_as: &[f64]) { }
   }
   
@@ -166,21 +166,21 @@ pub mod network {
       }
       println!("{} / {} = {}%", total_correct, test_set.len(), total_correct as f64 / test_set.len() as f64 * 100.0);
     }
-    fn train_batch(&mut self, batch: &[(Vec<f64>, Vec<f64>)], learning_rate: f64, cost_der: fn((&f64, &f64)) -> f64) {
+    fn train_batch(&mut self, batch: &[(Vec<f64>, Vec<f64>)], learning_rate: f64, cost_der: fn((&f64, &f64)) -> f64, lambda: f64) {
       for (inp, out) in batch {
         self.output_layer.feed(inp);
         let c_respect_as = self.output().iter().zip(out).map(cost_der).collect::<Vec<f64>>();
         self.output_layer.propagate(&c_respect_as);
       }
-      self.output_layer.apply_changes(learning_rate/batch.len() as f64);
+      self.output_layer.apply_changes(learning_rate/batch.len() as f64, lambda / batch.len() as f64);
     }
     pub fn train(&mut self, training_set: &mut [(Vec<f64>, Vec<f64>)], test_set: &[(Vec<f64>, Vec<f64>)], batch_size: usize, 
-            epochs: usize, learning_rate: f64, cost_der: fn((&f64, &f64)) -> f64, test_epochs: bool) {
+            epochs: usize, learning_rate: f64, lambda: f64, cost_der: fn((&f64, &f64)) -> f64, test_epochs: bool) {
       let mut rng = rand::thread_rng();
       for epoch in 1..epochs+1 {
         training_set.shuffle(&mut rng);
         for batch in training_set.chunks(batch_size) {
-          self.train_batch(batch, learning_rate, cost_der);
+          self.train_batch(batch, learning_rate, cost_der, lambda);
         }
         if test_epochs {
           print!("epoch {}: ", epoch);

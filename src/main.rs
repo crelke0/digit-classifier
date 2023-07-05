@@ -10,6 +10,6 @@ fn main() {
   let mut training_data = data.0;
   let test_data = data.1;
   println!("starting training...");
-  let mut network = Network::new(&[784, 30, 10], &[sigmoid, sigmoid, soft_max]);
-  network.train(&mut training_data, &test_data, 10, 1000, 0.5, crossentropy_cost_der, true);
+  let mut network = Network::new(&[784, 50, 10], &[sigmoid, sigmoid, soft_max]);
+  network.train(&mut training_data, &test_data, 10, 1000, 0.1, 0.001, crossentropy_cost_der, true);
 }
