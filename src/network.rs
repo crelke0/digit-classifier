@@ -1,5 +1,6 @@
 pub mod network {
   use rand::prelude::*;
+  use rand_distr::{Normal, Distribution};
   pub struct Node {
     weights: Vec<f64>,
     bias: f64,
@@ -10,10 +11,11 @@ pub mod network {
   }
   impl Node {
     fn new(num_weights: usize) -> Node {
-      let mut rng = rand::thread_rng();
+      let normal_weights = Normal::new(0.0, 1.0/(num_weights as f64).sqrt()).unwrap();
+      let normal_bias = Normal::new(0.0, 1.0).unwrap();
       Node {
-        weights: (0..num_weights).map(|_| rng.gen::<f64>()*2.0-1.0).collect(),
-        bias: 0.0,
+        weights: (0..num_weights).map(|_| normal_weights.sample(&mut rand::thread_rng())).collect(),
+        bias: normal_bias.sample(&mut rand::thread_rng()),
         d_weights: vec![0.0; num_weights],
         d_bias: 0.0,
         activation: 0.0,
