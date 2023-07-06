@@ -46,26 +46,54 @@ pub mod network {
     }
   }
   
-  trait Layer {
-    fn propagate(&mut self, c_respect_as: &[f64]);
-    fn activations(&self) -> Vec<f64>;
-    fn feed(&mut self, input: &[f64]);
+  enum Layer {
+    Hidden(HiddenLayer),
+    Input(Vec<f64>)
+  }
+  impl Layer {
     fn num_nodes(&self) -> usize {
-      self.activations().len()
+      match self {
+        Self::Hidden(hl) => hl.num_nodes(),
+        Self::Input(v) => v.len()
+      }
     }
-    fn apply_changes(&mut self, coef: f64, lambda_over_size: f64);
+    fn activations(&self) -> Vec<f64> {
+      match self {
+        Self::Hidden(hl) => hl.activations(),
+        Self::Input(v) => v.clone()
+      }
+    }
+    fn feed(&mut self, input: &[f64]) {
+      match self {
+        Self::Hidden(hl) => hl.feed(input),
+        Self::Input(v) => { *v = input.to_vec() }
+      }
+    }
+    fn propagate(&mut self, c_respect_as: &[f64]) {
+      match self {
+        Self::Hidden(hl) => hl.propagate(c_respect_as),
+        Self::Input(_) => {}
+      }
+    }
+    fn apply_changes(&mut self, coef: f64, lambda_over_size: f64) {
+      match self {
+        Self::Hidden(hl) => hl.apply_changes(coef, lambda_over_size),
+        Self::Input(_) => {}
+      }
+    }
   }
   
-  struct HiddenLayer { // HiddenLayer is actually for hidden layers AND the output layer, since they act the same
+  struct HiddenLayer {
     nodes: Vec<Node>,
-    previous_layer: Box<dyn Layer>,
+    previous_layer: Box<Layer>,
     activation_fn: ActivationFn
   }
   impl HiddenLayer {
-    fn new(previous_layer: Box<dyn Layer>, node_amount: usize, activation_fn: ActivationFn) -> HiddenLayer {
+    fn new(previous_layer: Box<Layer>, node_amount: usize, activation_fn: ActivationFn) -> HiddenLayer {
       let mut nodes = vec![];
+      let num_nodes = previous_layer.num_nodes();
       for _ in 0..node_amount {
-        nodes.push(Node::new(previous_layer.num_nodes()));
+        nodes.push(Node::new(num_nodes));
       }
       HiddenLayer {
         nodes: nodes,
@@ -73,8 +101,6 @@ pub mod network {
         activation_fn: activation_fn
       }
     }
-  }
-  impl Layer for HiddenLayer {
     fn activations(&self) -> Vec<f64> {
       self.nodes.iter().map(|x| x.activation).collect()
     }
@@ -113,36 +139,20 @@ pub mod network {
       }
       self.previous_layer.apply_changes(coef, lambda_over_size);
     }
-  }
-  
-  struct InputLayer {
-    activations: Vec<f64>
-  }
-  impl InputLayer {
-    fn new(size: usize) -> InputLayer{
-      InputLayer { activations: vec![0.0; size] }
+    fn num_nodes(&self) -> usize {
+      self.activations().len()
     }
-  }
-  impl Layer for InputLayer {
-    fn activations(&self) -> Vec<f64> {
-      self.activations.clone()
-    }
-    fn feed(&mut self, input: &[f64]) {
-      self.activations = input.to_vec();
-    }
-    fn apply_changes(&mut self, _coef: f64, _lambda_over_size: f64) { }
-    fn propagate(&mut self, _c_respect_as: &[f64]) { }
   }
   
   pub struct Network {
-    output_layer: HiddenLayer
+    output_layer: Layer
   }
   
   impl Network {
     pub fn new(dim: &[usize], activation_fns: &[ActivationFn]) -> Network {
-      let mut output_layer = HiddenLayer::new(Box::new(InputLayer::new(dim[0])), dim[1], activation_fns[0]);
+      let mut output_layer = Layer::Hidden(HiddenLayer::new(Box::new(Layer::Input(vec![0.0; dim[0]])), dim[1], activation_fns[0]));
       for i in 1..dim.len() {
-        output_layer = HiddenLayer::new(Box::new(output_layer), dim[i], activation_fns[i]);
+        output_layer = Layer::Hidden(HiddenLayer::new(Box::new(output_layer), dim[i], activation_fns[i - 1]));
       }
       Network {
         output_layer: output_layer
