@@ -2,7 +2,10 @@ pub mod network {
   use rand::prelude::*;
   use rand_distr::{Normal, Distribution};
   use crate::functions::functions::*;
+  use serde::{Serialize, Deserialize};
+  use std::fs;
   
+  #[derive(Serialize, Deserialize)]
   pub struct Node {
     weights: Vec<f64>,
     bias: f64,
@@ -46,6 +49,7 @@ pub mod network {
     }
   }
   
+  #[derive(Serialize, Deserialize)]
   enum Layer {
     Hidden(HiddenLayer),
     Input(Vec<f64>)
@@ -83,6 +87,7 @@ pub mod network {
     }
   }
   
+  #[derive(Serialize, Deserialize)]
   struct HiddenLayer {
     nodes: Vec<Node>,
     previous_layer: Box<Layer>,
@@ -144,10 +149,11 @@ pub mod network {
     }
   }
   
+  #[derive(Serialize, Deserialize)]
   pub struct Network {
     output_layer: Layer
   }
-  
+
   impl Network {
     pub fn new(dim: &[usize], activation_fns: &[ActivationFn]) -> Network {
       let mut output_layer = Layer::Hidden(HiddenLayer::new(Box::new(Layer::Input(vec![0.0; dim[0]])), dim[1], activation_fns[0]));
@@ -161,7 +167,7 @@ pub mod network {
     fn output(&self) -> Vec<f64>{
       self.output_layer.activations()
     }
-    fn test(&mut self, test_set: &[(Vec<f64>, Vec<f64>)]) {
+    fn test(&mut self, test_set: &[(Vec<f64>, Vec<f64>)]) -> f64 {
       let mut total_correct = 0;
       for (inp, out) in test_set {
         self.output_layer.feed(inp);
@@ -178,7 +184,7 @@ pub mod network {
           total_correct += 1;
         }
       }
-      println!("{} / {} = {}%", total_correct, test_set.len(), total_correct as f64 / test_set.len() as f64 * 100.0);
+      return total_correct as f64 / test_set.len() as f64;
     }
     fn train_batch(&mut self, batch: &[(Vec<f64>, Vec<f64>)], learning_rate: f64, cost: Cost, lambda: f64) {
       for (inp, out) in batch {
@@ -189,21 +195,37 @@ pub mod network {
       self.output_layer.apply_changes(learning_rate/batch.len() as f64, lambda / batch.len() as f64);
     }
     pub fn train(&mut self, training_set: &mut [(Vec<f64>, Vec<f64>)], test_set: &[(Vec<f64>, Vec<f64>)], batch_size: usize, 
-            epochs: usize, learning_rate: f64, lambda: f64, cost: Cost, test_epochs: bool) {
+            epochs: usize, learning_rate: f64, lambda: f64, cost: Cost, test_epochs: bool, serialize: bool) {
       let mut rng = rand::thread_rng();
+      let mut best = 0.0;
       for epoch in 1..epochs+1 {
         training_set.shuffle(&mut rng);
         for batch in training_set.chunks(batch_size) {
           self.train_batch(batch, learning_rate, cost, lambda);
         }
         if test_epochs {
-          print!("epoch {}: ", epoch);
-          self.test(test_set)
+          let res = self.test(test_set);
+          println!("epoch {}: {}%", epoch, res*100.0);
+          if serialize && res > best {
+            best = res;
+            let j = serde_json::to_string(&self).unwrap();
+            fs::write("pre_computed/net.json", j).expect("Unable to write file");
+            println!("saved!");
+          }
         }
       }
       if !test_epochs {
-        self.test(test_set);
+        println!("{}%", self.test(test_set)*100.0);
+        if serialize {
+          let j = serde_json::to_string(&self).unwrap();
+          fs::write("pre_computed/net.json", j).expect("Unable to write file");
+          println!("saved!");
+        }
       }
+    }
+    pub fn run(&mut self, input: &[f64]) -> Vec<f64> {
+      self.output_layer.feed(input);
+      return self.output();
     }
   }
 }

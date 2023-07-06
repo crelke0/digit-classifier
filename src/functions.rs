@@ -1,7 +1,8 @@
 pub mod functions {
+  use serde::{Serialize, Deserialize};
   use crate::network::network::Node;
 
-  #[derive(Clone, Copy)]
+  #[derive(Clone, Copy, Serialize, Deserialize)]
   pub enum ActivationFn {
     Sigmoid,
     LeakyRelu(f64),
@@ -58,7 +59,7 @@ pub mod functions {
     }
   }
 
-  #[derive(Clone, Copy)]
+  #[derive(Clone, Copy, Serialize, Deserialize)]
   pub enum Cost {
     CrossEntropy,
     Quadratic
