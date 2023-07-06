@@ -1,6 +1,8 @@
 pub mod network {
   use rand::prelude::*;
   use rand_distr::{Normal, Distribution};
+  use crate::functions::functions::*;
+  
   pub struct Node {
     weights: Vec<f64>,
     bias: f64,
@@ -57,10 +59,10 @@ pub mod network {
   struct HiddenLayer { // HiddenLayer is actually for hidden layers AND the output layer, since they act the same
     nodes: Vec<Node>,
     previous_layer: Box<dyn Layer>,
-    activation_fn: fn(&mut [Node])
+    activation_fn: ActivationFn
   }
   impl HiddenLayer {
-    fn new(previous_layer: Box<dyn Layer>, node_amount: usize, activation_fn: fn(&mut [Node])) -> HiddenLayer {
+    fn new(previous_layer: Box<dyn Layer>, node_amount: usize, activation_fn: ActivationFn) -> HiddenLayer {
       let mut nodes = vec![];
       for _ in 0..node_amount {
         nodes.push(Node::new(previous_layer.num_nodes()));
@@ -81,7 +83,7 @@ pub mod network {
       for node in &mut self.nodes {
         node.update_activation(&self.previous_layer.activations())
       }
-      (self.activation_fn)(&mut self.nodes)
+      self.activation_fn.eval(&mut self.nodes)
     }
     fn propagate(&mut self, c_respect_as: &[f64]) {
       let mut c_respect_zs = vec![];
@@ -137,7 +139,7 @@ pub mod network {
   }
   
   impl Network {
-    pub fn new(dim: &[usize], activation_fns: &[fn(&mut [Node])]) -> Network {
+    pub fn new(dim: &[usize], activation_fns: &[ActivationFn]) -> Network {
       let mut output_layer = HiddenLayer::new(Box::new(InputLayer::new(dim[0])), dim[1], activation_fns[0]);
       for i in 1..dim.len() {
         output_layer = HiddenLayer::new(Box::new(output_layer), dim[i], activation_fns[i]);
@@ -168,21 +170,21 @@ pub mod network {
       }
       println!("{} / {} = {}%", total_correct, test_set.len(), total_correct as f64 / test_set.len() as f64 * 100.0);
     }
-    fn train_batch(&mut self, batch: &[(Vec<f64>, Vec<f64>)], learning_rate: f64, cost_der: fn((&f64, &f64)) -> f64, lambda: f64) {
+    fn train_batch(&mut self, batch: &[(Vec<f64>, Vec<f64>)], learning_rate: f64, cost: Cost, lambda: f64) {
       for (inp, out) in batch {
         self.output_layer.feed(inp);
-        let c_respect_as = self.output().iter().zip(out).map(cost_der).collect::<Vec<f64>>();
+        let c_respect_as = self.output().iter().zip(out).map(|(a, y)| cost.derivative(*a, *y)).collect::<Vec<f64>>();
         self.output_layer.propagate(&c_respect_as);
       }
       self.output_layer.apply_changes(learning_rate/batch.len() as f64, lambda / batch.len() as f64);
     }
     pub fn train(&mut self, training_set: &mut [(Vec<f64>, Vec<f64>)], test_set: &[(Vec<f64>, Vec<f64>)], batch_size: usize, 
-            epochs: usize, learning_rate: f64, lambda: f64, cost_der: fn((&f64, &f64)) -> f64, test_epochs: bool) {
+            epochs: usize, learning_rate: f64, lambda: f64, cost: Cost, test_epochs: bool) {
       let mut rng = rand::thread_rng();
       for epoch in 1..epochs+1 {
         training_set.shuffle(&mut rng);
         for batch in training_set.chunks(batch_size) {
-          self.train_batch(batch, learning_rate, cost_der, lambda);
+          self.train_batch(batch, learning_rate, cost, lambda);
         }
         if test_epochs {
           print!("epoch {}: ", epoch);
@@ -193,12 +195,5 @@ pub mod network {
         self.test(test_set);
       }
     }
-  }
-
-  pub fn quadratic_cost_der((a, y): (&f64, &f64)) -> f64 {
-    2.0*(a - y)
-  }
-  pub fn crossentropy_cost_der((a, y): (&f64, &f64)) -> f64 {
-    -y/a + (1.0 - y)/(1.0 - a)
   }
 }
