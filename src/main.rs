@@ -15,8 +15,8 @@ fn main() {
   let test_data = data.1;
   if train {
     println!("starting training...");
-    let mut network = Network::new(&[784, 100, 20, 10], &[ActivationFn::Sigmoid, ActivationFn::Sigmoid, ActivationFn::SoftMax]);
-    network.train(&mut training_data, &test_data, 10, 50, 0.3, 0.002, Cost::CrossEntropy, true, true);
+    let mut network = Network::new(&[784, 100, 80, 10], &[ActivationFn::Sigmoid, ActivationFn::Sigmoid, ActivationFn::SoftMax]);
+    network.train(&mut training_data, &test_data, 10, 100, 0.25, 0.002, Cost::CrossEntropy, true, true);
   } else {
     let contents = fs::read_to_string("pre_computed/net.json").expect("Unable to read file");
     let mut network = serde_json::from_str::<Network>(&contents).expect("Unable to deserialize file");
@@ -37,13 +37,13 @@ fn main() {
     input.append(&mut vec![0.0; 28*4]);
     let probabilities = network.run(&input);
     let mut guess = 0;
-    let mut highest = 0.0;
+    let mut highest = 0.0; 
     for i in 0..probabilities.len() {
       if probabilities[i] > highest {
         highest = probabilities[i];
         guess = i;
       }
     }
-    println!("Probabilities: {:?} \n Guess: {}", probabilities, guess);
+    println!("Probabilities: {:?} \nGuess: {}", probabilities, guess);
   }
 }
