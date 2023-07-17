@@ -26,15 +26,17 @@ fn main() {
     let mut buf = vec![0; reader.output_buffer_size()];
     let info = reader.next_frame(&mut buf).unwrap();
     let bytes = &buf[..info.buffer_size()].iter().map(|x| 1.0 - *x as f64/255.0).collect::<Vec<f64>>();
-    let mut input = vec![0.0; 28*4];
-    for i in 0..20 {
-      input.append(&mut vec![0.0; 4]);
-      for j in 0..20 {
-        input.push(bytes[(i*20+j)*3]);
+    let padding = ((28.0 - (bytes.len() as f64 / 4.0).sqrt()) / 2.0) as usize;
+
+    let mut input = vec![0.0; 28*padding];
+    for i in 0..(28-padding*2) {
+      input.append(&mut vec![0.0; padding]);
+      for j in 0..(28-padding*2) {
+        input.push(bytes[(i*(28-padding*2)+j)*4]);
       }
-      input.append(&mut vec![0.0; 4]);
+      input.append(&mut vec![0.0; padding]);
     }
-    input.append(&mut vec![0.0; 28*4]);
+    input.append(&mut vec![0.0; 28*padding]);
     let probabilities = network.run(&input);
     let mut guess = 0;
     let mut highest = 0.0; 
